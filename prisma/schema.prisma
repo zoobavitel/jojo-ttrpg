@@ -1,0 +1,192 @@
+// prisma/schema.prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// prisma/schema.prisma
+model User {
+  id            String     @id @default(uuid())
+  email         String     @unique
+  username      String?    @unique
+  passwordHash  String?    // Optional because Google users won't have a password
+  googleId      String?    @unique  // For Google OAuth users
+  characters    Character[]
+  campaigns     Campaign[] @relation("CampaignPlayers")
+  dmCampaigns   Campaign[] @relation("CampaignDM")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+// Character model with all BiTD/JoJo mechanics
+model Character {
+  id          String   @id @default(uuid())
+  name        String
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  campaignId  String?
+  campaign    Campaign? @relation(fields: [campaignId], references: [id])
+  origin      String
+  tier        Int      @default(1)
+  
+  // Action ratings (0-4 scale)
+  // Insight
+  hunt        Int      @default(0)
+  study       Int      @default(0)
+  survey      Int      @default(0)
+  tinker      Int      @default(0)
+  // Prowess
+  finesse     Int      @default(0)
+  prowl       Int      @default(0)
+  skirmish    Int      @default(0)
+  wreck       Int      @default(0)
+  // Resolve
+  bizarre     Int      @default(0)
+  command     Int      @default(0)
+  consort     Int      @default(0)
+  sway        Int      @default(0)
+
+  // Stress and Trauma
+  stress          Int       @default(0)
+  maxStress       Int       @default(9)  // Modified by Stand's Durability
+  trauma          Int       @default(0)
+  traumaConditions String[] // Array of active conditions
+
+  // Vice
+  vice           String
+  vicePurveyor   String
+
+  // Relationships
+  friends        String[]  // Names of friends
+  rivals         String[]  // Names of rivals
+
+  // Experience
+  insightXp      Int      @default(0)
+  prowessXp      Int      @default(0)
+  resolveXp      Int      @default(0)
+  playbackXp     Int      @default(0)  // For Stand advancement
+
+  // Harm (tracked as JSON for flexibility)
+  harm          Json      @default("{\"level1\": [], \"level2\": [], \"level3\": [], \"level4\": false}")
+
+  // The character's Stand
+  stand         Stand?
+
+  // Armor and items
+  specialArmor  Int      @default(2)  // Modified by Stand's Durability
+  items         String[] // Array of item descriptions
+
+  // Roll history for the campaign
+  rolls        Roll[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// Stand model with all stats and abilities
+model Stand {
+  id                String    @id @default(uuid())
+  name              String
+  characterId       String    @unique
+  character         Character @relation(fields: [characterId], references: [id])
+
+  // Stand Form
+  type             String    // Range Dependent, Automatic, Range Irrelevant
+  form             String    // Natural Humanoid, Artificial Humanoid, etc.
+  consciousness    String    // A through F grade
+
+  // Stand Stats (stored as string grades: S, A, B, C, D, F)
+  power           String
+  speed           String
+  range           String
+  durability      String
+  precision       String
+  potential       String
+
+  // Stand Abilities
+  abilities       StandAbility[]
+
+  // Visual description
+  appearance      String
+  manifestation   String?
+  specialTraits   String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Stand Abilities (both unique and standard)
+model StandAbility {
+  id          String   @id @default(uuid())
+  name        String
+  standId     String
+  stand       Stand    @relation(fields: [standId], references: [id])
+  isUnique    Boolean  @default(true)
+  // For unique abilities, store their uses
+  offenseUse  String?
+  defenseUse  String?
+  utilityUse  String?
+  // For standard abilities
+  description String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Campaign model
+model Campaign {
+  id          String      @id @default(uuid())
+  name        String
+  description String?
+  dmId        String
+  dm          User        @relation("CampaignDM", fields: [dmId], references: [id])
+  players     User[]      @relation("CampaignPlayers")
+  characters  Character[]
+  tier        Int         @default(1)
+  status      String      @default("ACTIVE") // ACTIVE, COMPLETED, PAUSED
+  
+  // Campaign progress clocks
+  clocks      Clock[]
+  // Campaign roll history
+  rolls       Roll[]
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+// Progress Clocks (for healing, projects, etc)
+model Clock {
+  id          String    @id @default(uuid())
+  name        String
+  segments    Int       @default(4)  // Total segments in clock
+  filled      Int       @default(0)  // Filled segments
+  campaignId  String
+  campaign    Campaign  @relation(fields: [campaignId], references: [id])
+  type        String    // HEALING, PROGRESS, FACTION, etc.
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Roll history
+model Roll {
+  id          String    @id @default(uuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id])
+  campaignId  String
+  campaign    Campaign  @relation(fields: [campaignId], references: [id])
+  
+  rollType    String    // STANDARD, RESISTANCE, FORTUNE, etc.
+  actionType  String?   // SKIRMISH, HUNT, etc. (if applicable)
+  position    String    // CONTROLLED, RISKY, DESPERATE
+  effect      String    // LIMITED, STANDARD, GREAT
+  dice        Int       // Number of dice rolled
+  results     Int[]     // Array of die results
+  outcome     String    // CRIT, SUCCESS, PARTIAL, FAILURE
+  
+  createdAt   DateTime  @default(now())
+}
